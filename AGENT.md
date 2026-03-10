@@ -1,6 +1,7 @@
 # Agent Instructions
 
 ## Core Tech Stack
+- **Package Manager**: PNPM
 - **Framework**: Next.js 15 (App Router).
 - **Styling**: Tailwind CSS.
 - **UI Components**: shadcn/ui (Radix UI primitives).
@@ -35,6 +36,7 @@
 - **Example**: `feat: implement dark mode charts with shadcn`
 
 ## ⚠️ CRITICAL SAFETY RULES (HARD CONSTRAINTS)
+- ** ALWAYS USE PNPM**
 - **NO PUSHING**: The agent is strictly FORBIDDEN from executing `git push`. 
 - **ORIGIN PROTECTION**: Never interact with remote origins or GitHub. All pushes to the cloud are to be handled manually by the human user.
 - **LOCAL ONLY**: Git operations should be limited to `git checkout`, `git add`, `git commit`, and `git branch`.

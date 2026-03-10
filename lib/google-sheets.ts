@@ -21,6 +21,14 @@ export interface Order {
     total: string;
     customerNote: string;
     paymentMethod: string;
+
+    // New editable fields
+    vehicleType?: string;
+    pickup_remark?: string;
+    pickup_address?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    qty?: string;
 }
 
 // Initialize auth
