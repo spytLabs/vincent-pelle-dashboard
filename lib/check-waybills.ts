@@ -10,7 +10,7 @@ async function checkWaybillsQuantity() {
     const url = `${process.env.KOOMBIYO_BASE_URL}/Waybils/users`;
     const body = new URLSearchParams({
         apikey: apiKey,
-        limit: '1',
+        limit: '1000',
     }).toString();
 
     const response = await fetch(url, {
@@ -28,7 +28,6 @@ async function checkWaybillsQuantity() {
     }
 
     const waybillsJson = await response.json();
-    console.log('Waybills JSON:', waybillsJson);
 
     if (waybillsJson?.status === 'error') {
         throw new Error(waybillsJson.message || 'Koombiyo API returned an error');
