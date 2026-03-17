@@ -13,8 +13,11 @@ type IncomingOrder = {
   city?: string;
   address?: string;
   receiverStreet?: string;
+  addressLine1?: string; // Add this
+  addressLine2?: string; // Add this
   phone?: string;
   mobile?: string;
+  whatsapp?: string;     // Might as well add this since your payload sends it
   itemsSummary?: string;
   total?: string | number;
 };
@@ -88,7 +91,11 @@ export async function POST(req: Request) {
           throw new Error(`City not found: "${cityName}" in district "${districtName}"`);
         }
 
-        const receiverStreet = String(o.address ?? o.receiverStreet ?? "").trim();
+
+        const baseAddress = String(o.address ?? o.receiverStreet ?? o.addressLine1 ?? "").trim();
+        const extraAddress = String(o.addressLine2 ?? "").trim();
+        const receiverStreet = extraAddress ? `${baseAddress}, ${extraAddress}` : baseAddress;
+
         const receiverPhone = String(o.phone ?? o.mobile ?? "").trim();
 
         if (!receiverStreet) throw new Error("Missing receiver street/address.");
