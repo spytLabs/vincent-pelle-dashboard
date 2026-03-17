@@ -11,7 +11,11 @@ function colToA1(colNumber: number) {
   return s;
 }
 
-export async function updateOrderStatusById(orderId: string, newStatus: string) {
+export async function updateOrderStatusById(
+  orderId: string,
+  newStatus: string,
+  waybillId?: string
+) {
   const sheetId = process.env.GOOGLE_SHEET_ID?.trim();
   const sheetName = process.env.GOOGLE_SHEET_NAME?.trim() || "Orders";
   const clientEmail =
@@ -33,7 +37,7 @@ export async function updateOrderStatusById(orderId: string, newStatus: string) 
 
   const sheets = google.sheets({ version: "v4", auth });
 
-  const readRange = `${sheetName}!A1:Z`;
+  const readRange = `${sheetName}!A1:AZ`;
   const read = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetId,
     range: readRange,
@@ -45,9 +49,18 @@ export async function updateOrderStatusById(orderId: string, newStatus: string) 
   const headers = (values[0] || []).map((h) => String(h).toLowerCase().trim());
   const idIdx = headers.findIndex((h) => ["id", "order id", "orderid"].includes(h));
   const statusIdx = headers.findIndex((h) => h === "status");
+  const waybillIdx = headers.findIndex((h) =>
+    ["waybilll_id", "waybill_id", "waybill id", "waybillid"].includes(h)
+  );
 
   if (idIdx === -1 || statusIdx === -1) {
     throw new Error("Could not find id/status columns in sheet header row.");
+  }
+
+  if (waybillId && waybillIdx === -1) {
+    throw new Error(
+      "Could not find waybilll_id column in sheet header row. Expected column name: waybilll_id."
+    );
   }
 
   const rowIndex = values.findIndex(
@@ -60,14 +73,27 @@ export async function updateOrderStatusById(orderId: string, newStatus: string) 
 
   const rowNumber = rowIndex + 1;
   const statusCol = colToA1(statusIdx + 1);
-  const targetRange = `${sheetName}!${statusCol}${rowNumber}`;
-
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: sheetId,
-    range: targetRange,
-    valueInputOption: "RAW",
-    requestBody: {
+  const statusRange = `${sheetName}!${statusCol}${rowNumber}`;
+  const updates: Array<{ range: string; values: string[][] }> = [
+    {
+      range: statusRange,
       values: [[newStatus]],
+    },
+  ];
+
+  if (waybillId && waybillIdx !== -1) {
+    const waybillCol = colToA1(waybillIdx + 1);
+    updates.push({
+      range: `${sheetName}!${waybillCol}${rowNumber}`,
+      values: [[waybillId]],
+    });
+  }
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: sheetId,
+    requestBody: {
+      valueInputOption: "RAW",
+      data: updates,
     },
   });
 }

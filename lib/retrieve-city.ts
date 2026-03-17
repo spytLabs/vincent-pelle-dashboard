@@ -27,7 +27,6 @@ async function retrieveCity(city: string, districtId: string | number) {
     }
 
     const citiesJson = await response.json();
-    console.log('Cities JSON:', citiesJson);
 
     if (citiesJson?.status === 'error') {
         throw new Error(citiesJson.message || 'Koombiyo API returned an error');

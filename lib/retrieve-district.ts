@@ -26,7 +26,6 @@ async function retrieveDistrict(district: string) {
     }
 
     const districtsJson = await response.json();
-    console.log('Districts JSON:', districtsJson);
 
     if (districtsJson?.status === 'error') {
         throw new Error(districtsJson.message || 'Koombiyo API returned an error');

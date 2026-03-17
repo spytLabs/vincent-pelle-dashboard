@@ -114,7 +114,7 @@ export async function POST(req: Request) {
           getCod: parseCod(o.total),
         });
 
-        await updateOrderStatusById(orderId, "sent-to-koombiyo");
+        await updateOrderStatusById(orderId, "sent-to-koombiyo", String(waybill));
         updatedOrderIds.push(orderId);
         generatedWaybills.push({ orderId, waybill: String(waybill) });
         logs.push(`✅ #${orderId}: Sent to Koombiyo. Waybill: ${waybill}`);
