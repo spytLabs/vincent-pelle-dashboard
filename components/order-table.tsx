@@ -110,9 +110,48 @@ function parseDate(dateStr: string): number {
   return isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
-function isLockedStatus(status?: string) {
-  const s = (status ?? "").toLowerCase().trim();
-  return s === "sent-to-koombiyo" || s === "rejected";
+function normalizeStatus(status?: string) {
+  return String(status ?? "")
+    .toLowerCase()
+    .trim();
+}
+
+function normalizePaymentMethod(value?: string) {
+  return String(value ?? "")
+    .toLowerCase()
+    .trim();
+}
+
+function getReacceptStatusForOrder(order?: Order): "processing" | "on-hold" {
+  const paymentMethod = normalizePaymentMethod(order?.paymentMethod);
+  const isCOD =
+    paymentMethod === "cash on delivery" ||
+    paymentMethod === "cod" ||
+    paymentMethod.includes("cash on delivery");
+
+  return isCOD ? "processing" : "on-hold";
+}
+
+function getStatusBadgeClass(status?: string) {
+  const normalized = normalizeStatus(status);
+
+  if (normalized === "sent-to-koombiyo") {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+
+  if (normalized === "processing") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+
+  if (normalized === "on-hold") {
+    return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+
+  if (normalized === "rejected") {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+
+  return "border-zinc-200 bg-zinc-50 text-zinc-700";
 }
 
 export function OrderTable({ orders }: { orders: Order[] }) {
@@ -128,7 +167,6 @@ export function OrderTable({ orders }: { orders: Order[] }) {
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterDistrict, setFilterDistrict] = useState<string>("");
   const [filterSearch, setFilterSearch] = useState<string>("");
-  const [showFiltered, setShowFiltered] = useState(false);
 
   // Selection state
   const [selectedMain, setSelectedMain] = useState<Set<string>>(new Set());
@@ -150,8 +188,12 @@ export function OrderTable({ orders }: { orders: Order[] }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   // Koombiyo Locations State
-  const [districts, setDistricts] = useState<Array<{ district_id: number; district_name: string }>>([]);
-  const [cities, setCities] = useState<Array<{ city_id: number; name: string }>>([]);
+  const [districts, setDistricts] = useState<
+    Array<{ district_id: number; district_name: string }>
+  >([]);
+  const [cities, setCities] = useState<
+    Array<{ city_id: number; name?: string; city_name?: string }>
+  >([]);
   const [loadingCities, setLoadingCities] = useState(false);
 
   // PDF Download State
@@ -178,7 +220,9 @@ export function OrderTable({ orders }: { orders: Order[] }) {
     "Total",
     "Customer Note",
   ];
-  const allowedSet = new Set(ALLOWED_EDITABLE_FIELDS.map((f) => f.toLowerCase()));
+  const allowedSet = new Set(
+    ALLOWED_EDITABLE_FIELDS.map((f) => f.toLowerCase()),
+  );
 
   useEffect(() => {
     if (detailsOpen) {
@@ -202,7 +246,8 @@ export function OrderTable({ orders }: { orders: Order[] }) {
     }
 
     const matchedDistrict = districts.find(
-      (d) => d.district_name.toLowerCase() === selectedDistrictName.toLowerCase()
+      (d) =>
+        d.district_name.toLowerCase() === selectedDistrictName.toLowerCase(),
     );
 
     if (matchedDistrict) {
@@ -260,7 +305,6 @@ export function OrderTable({ orders }: { orders: Order[] }) {
     setFilterStatus("");
     setFilterDistrict("");
     setFilterSearch("");
-    setShowFiltered(false);
   };
 
   // Apply sorting
@@ -321,14 +365,6 @@ export function OrderTable({ orders }: { orders: Order[] }) {
 
   const getOrderId = useCallback((o: Order) => String(o.id ?? "").trim(), []);
   const getDisplayStatus = useCallback((o: Order) => o.status ?? "", []);
-  const isSendable = useCallback(
-    (o: Order) => {
-      const id = getOrderId(o);
-      if (!id) return false;
-      return !isLockedStatus(getDisplayStatus(o));
-    },
-    [getDisplayStatus, getOrderId],
-  );
 
   const mapDetailToOrder = (baseOrder: Order, detail: OrderDetails): Order => {
     const next = { ...baseOrder };
@@ -438,7 +474,9 @@ export function OrderTable({ orders }: { orders: Order[] }) {
       const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.error || `Failed to fetch details for order #${orderId}.`);
+        throw new Error(
+          data?.error || `Failed to fetch details for order #${orderId}.`,
+        );
       }
 
       const detail: OrderDetails | undefined = data?.order;
@@ -470,7 +508,10 @@ export function OrderTable({ orders }: { orders: Order[] }) {
   const generateBulkWaybillPdfs = useCallback(
     async (orderIds: string[]) => {
       if (!orderIds.length) {
-        showToast("No eligible orders selected. (Only 'sent-to-koombiyo' orders can be exported to PDF).", "info");
+        showToast(
+          "No eligible orders selected. (Only 'sent-to-koombiyo' orders can be exported to PDF).",
+          "info",
+        );
         return;
       }
 
@@ -499,7 +540,10 @@ export function OrderTable({ orders }: { orders: Order[] }) {
       }
 
       if (failed.length > 0) {
-        showToast(`${failed.length} selected order(s) missing waybills.`, "error");
+        showToast(
+          `${failed.length} selected order(s) missing waybills.`,
+          "error",
+        );
       }
 
       if (waybillIds.length > 0) {
@@ -534,9 +578,15 @@ export function OrderTable({ orders }: { orders: Order[] }) {
 
           setPdfStatusText("Download complete!");
           setPdfProgress(100);
-          showToast(`Downloaded bulk PDF for ${waybillIds.length} orders.`, "success");
+          showToast(
+            `Downloaded bulk PDF for ${waybillIds.length} orders.`,
+            "success",
+          );
         } catch (e) {
-          showToast(e instanceof Error ? e.message : "Failed to load bulk PDF.", "error");
+          showToast(
+            e instanceof Error ? e.message : "Failed to load bulk PDF.",
+            "error",
+          );
           setPdfStatusText("Failed to generate PDF.");
         }
       } else {
@@ -577,9 +627,9 @@ export function OrderTable({ orders }: { orders: Order[] }) {
       prev.map((order) =>
         getOrderId(order) === orderId
           ? {
-            ...order,
-            status,
-          }
+              ...order,
+              status,
+            }
           : order,
       ),
     );
@@ -719,7 +769,7 @@ export function OrderTable({ orders }: { orders: Order[] }) {
 
   const updateOrderStatus = async (
     orderId: string,
-    status: "rejected" | "on-hold",
+    status: "rejected" | "on-hold" | "processing",
   ) => {
     setIsProcessing(true);
     try {
@@ -746,8 +796,84 @@ export function OrderTable({ orders }: { orders: Order[] }) {
     }
   };
 
+  const confirmAndRejectOrder = (orderId: string) => {
+    const confirmed = window.confirm(
+      `Reject order #${orderId}? This action will set the status to rejected.`,
+    );
+
+    if (!confirmed) return;
+    updateOrderStatus(orderId, "rejected");
+  };
+
+  const bulkUpdateOrderStatus = async (
+    orderIds: string[],
+    status: "rejected" | "on-hold" | "processing",
+  ) => {
+    if (!orderIds.length) {
+      showToast("No eligible orders selected.", "info");
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const results = await Promise.all(
+        orderIds.map(async (orderId) => {
+          const res = await fetch("/api/orders/status", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId, status }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            return {
+              orderId,
+              success: false,
+              error: String(data?.error || "Failed to update order status."),
+            };
+          }
+
+          return { orderId, success: true };
+        }),
+      );
+
+      const successIds = results
+        .filter((result) => result.success)
+        .map((result) => result.orderId);
+      const failedResults = results.filter((result) => !result.success);
+
+      for (const id of successIds) {
+        syncOrderStatus(id, status);
+      }
+
+      if (successIds.length) {
+        showToast(
+          `Updated ${successIds.length} order${successIds.length > 1 ? "s" : ""} to ${status}.`,
+          "success",
+        );
+      }
+
+      if (failedResults.length) {
+        showToast(
+          `${failedResults.length} order${failedResults.length > 1 ? "s" : ""} failed to update.`,
+          "error",
+        );
+      }
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to update order statuses.",
+        "error",
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const processOrders = async (inputOrders: Order[]) => {
-    const toSend = inputOrders;
+    const toSend = inputOrders.filter(
+      (order) => normalizeStatus(getDisplayStatus(order)) === "processing",
+    );
     if (!toSend.length) {
       showToast("No eligible orders selected.", "info");
       return;
@@ -777,9 +903,9 @@ export function OrderTable({ orders }: { orders: Order[] }) {
           prev.map((order) =>
             data.updatedOrderIds.includes(getOrderId(order))
               ? {
-                ...order,
-                status: "sent-to-koombiyo",
-              }
+                  ...order,
+                  status: "sent-to-koombiyo",
+                }
               : order,
           ),
         );
@@ -798,7 +924,8 @@ export function OrderTable({ orders }: { orders: Order[] }) {
 
         if (data.updatedOrderIds.length > 0) {
           showToast(
-            `Sent ${data.updatedOrderIds.length} order${data.updatedOrderIds.length > 1 ? "s" : ""
+            `Sent ${data.updatedOrderIds.length} order${
+              data.updatedOrderIds.length > 1 ? "s" : ""
             } to Koombiyo.`,
             "success",
           );
@@ -830,15 +957,82 @@ export function OrderTable({ orders }: { orders: Order[] }) {
     [filteredOrders, getOrderId],
   );
 
+  const selectedFilteredSentOrderIds = useMemo(
+    () =>
+      filteredOrders
+        .filter(
+          (o) =>
+            selectedFiltered.has(getOrderId(o)) &&
+            normalizeStatus(getDisplayStatus(o)) === "sent-to-koombiyo",
+        )
+        .map((o) => getOrderId(o)),
+    [filteredOrders, selectedFiltered, getOrderId, getDisplayStatus],
+  );
+
+  const selectedFilteredProcessingOrders = useMemo(
+    () =>
+      filteredOrders.filter(
+        (o) =>
+          selectedFiltered.has(getOrderId(o)) &&
+          normalizeStatus(getDisplayStatus(o)) === "processing",
+      ),
+    [filteredOrders, selectedFiltered, getOrderId, getDisplayStatus],
+  );
+
+  const selectedFilteredOnHoldOrderIds = useMemo(
+    () =>
+      filteredOrders
+        .filter(
+          (o) =>
+            selectedFiltered.has(getOrderId(o)) &&
+            normalizeStatus(getDisplayStatus(o)) === "on-hold",
+        )
+        .map((o) => getOrderId(o)),
+    [filteredOrders, selectedFiltered, getOrderId, getDisplayStatus],
+  );
+
+  const selectedMainSentOrderIds = useMemo(
+    () =>
+      sortedOrders
+        .filter(
+          (o) =>
+            selectedMain.has(getOrderId(o)) &&
+            normalizeStatus(getDisplayStatus(o)) === "sent-to-koombiyo",
+        )
+        .map((o) => getOrderId(o)),
+    [sortedOrders, selectedMain, getOrderId, getDisplayStatus],
+  );
+
+  const selectedMainProcessingOrders = useMemo(
+    () =>
+      sortedOrders.filter(
+        (o) =>
+          selectedMain.has(getOrderId(o)) &&
+          normalizeStatus(getDisplayStatus(o)) === "processing",
+      ),
+    [sortedOrders, selectedMain, getOrderId, getDisplayStatus],
+  );
+
+  const selectedOrder = useMemo(
+    () => tableOrders.find((order) => getOrderId(order) === selectedOrderId),
+    [tableOrders, selectedOrderId, getOrderId],
+  );
+
+  const selectedDetailsNormalizedStatus = normalizeStatus(
+    selectedOrderDetails?.status,
+  );
+
   const renderRow = (
     order: Order,
     selected: Set<string>,
     toggle: (id: string) => void,
   ) => {
     const orderId = getOrderId(order);
-    const locked = !isSendable(order);
-    const isRejected = getDisplayStatus(order).toLowerCase() === "rejected";
-    const isSent = getDisplayStatus(order).toLowerCase() === "sent-to-koombiyo";
+    const normalizedStatus = normalizeStatus(getDisplayStatus(order));
+    const isRejected = normalizedStatus === "rejected";
+    const isSent = normalizedStatus === "sent-to-koombiyo";
+    const isOnHold = normalizedStatus === "on-hold";
+    const canSendToKoombiyo = normalizedStatus === "processing";
     const displayStatus = getDisplayStatus(order);
 
     return (
@@ -869,14 +1063,8 @@ export function OrderTable({ orders }: { orders: Order[] }) {
 
         <TableCell>
           <Badge
-            variant={
-              displayStatus?.toLowerCase() === "completed"
-                ? "default"
-                : displayStatus?.toLowerCase() === "on-hold"
-                  ? "secondary"
-                  : "outline"
-            }
-            className="capitalize font-medium"
+            variant="outline"
+            className={`capitalize font-medium ${getStatusBadgeClass(displayStatus)}`}
           >
             {displayStatus || "Pending"}
           </Badge>
@@ -907,7 +1095,7 @@ export function OrderTable({ orders }: { orders: Order[] }) {
 
         <TableCell onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-end gap-2">
-            {!locked && (
+            {canSendToKoombiyo && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -919,13 +1107,25 @@ export function OrderTable({ orders }: { orders: Order[] }) {
               </Button>
             )}
 
+            {isOnHold && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="cursor-pointer"
+                disabled={isProcessing}
+                onClick={() => updateOrderStatus(orderId, "processing")}
+              >
+                Mark as Processing
+              </Button>
+            )}
+
             {!isSent && !isRejected && (
               <Button
                 variant="destructive"
                 size="sm"
                 className="cursor-pointer"
                 disabled={isProcessing}
-                onClick={() => updateOrderStatus(orderId, "rejected")}
+                onClick={() => confirmAndRejectOrder(orderId)}
               >
                 Reject this order
               </Button>
@@ -949,7 +1149,9 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                 size="sm"
                 className="cursor-pointer"
                 disabled={isProcessing}
-                onClick={() => updateOrderStatus(orderId, "on-hold")}
+                onClick={() =>
+                  updateOrderStatus(orderId, getReacceptStatusForOrder(order))
+                }
               >
                 Reaccept this order
               </Button>
@@ -977,12 +1179,13 @@ export function OrderTable({ orders }: { orders: Order[] }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`rounded-md border px-3 py-2 text-sm shadow-lg ${toast.variant === "success"
-              ? "border-emerald-600/30 bg-emerald-50 text-emerald-900"
-              : toast.variant === "error"
-                ? "border-destructive/40 bg-destructive/10 text-destructive"
-                : "border-sky-600/30 bg-sky-50 text-sky-900"
-              }`}
+            className={`rounded-md border px-3 py-2 text-sm shadow-lg ${
+              toast.variant === "success"
+                ? "border-emerald-600/30 bg-emerald-50 text-emerald-900"
+                : toast.variant === "error"
+                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                  : "border-sky-600/30 bg-sky-50 text-sky-900"
+            }`}
           >
             {toast.message}
           </div>
@@ -1024,29 +1227,19 @@ export function OrderTable({ orders }: { orders: Order[] }) {
           ))}
         </select>
         {hasActiveFilters && (
-          <>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => setShowFiltered(true)}
-              className="cursor-pointer"
-            >
-              Show Filtered ({filteredOrders.length})
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearFilters}
-              className="cursor-pointer text-muted-foreground"
-            >
-              <X className="h-3.5 w-3.5 mr-1" /> Clear
-            </Button>
-          </>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="cursor-pointer text-muted-foreground"
+          >
+            <X className="h-3.5 w-3.5 mr-1" /> Clear
+          </Button>
         )}
       </div>
 
       {/* Filtered Results Temp Table */}
-      {showFiltered && hasActiveFilters && (
+      {hasActiveFilters && (
         <div className="rounded-xl border-2 border-primary/30 bg-card shadow-sm overflow-hidden">
           <div className="flex items-center justify-between bg-primary/5 px-4 py-2 border-b">
             <span className="text-sm font-semibold">
@@ -1073,38 +1266,37 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                 variant="outline"
                 size="sm"
                 disabled={
-                  isProcessing ||
-                  filteredOrders.filter(o => selectedFiltered.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "sent-to-koombiyo").length === 0
+                  isProcessing || selectedFilteredSentOrderIds.length === 0
                 }
-                onClick={() => generateBulkWaybillPdfs(
-                  filteredOrders.filter(o => selectedFiltered.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "sent-to-koombiyo").map(o => getOrderId(o))
-                )}
+                onClick={() =>
+                  generateBulkWaybillPdfs(selectedFilteredSentOrderIds)
+                }
               >
-                PDF Selected ({filteredOrders.filter(o => selectedFiltered.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "sent-to-koombiyo").length})
+                PDF Selected ({selectedFilteredSentOrderIds.length})
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={
+                  isProcessing || selectedFilteredOnHoldOrderIds.length === 0
+                }
+                onClick={() =>
+                  bulkUpdateOrderStatus(
+                    selectedFilteredOnHoldOrderIds,
+                    "processing",
+                  )
+                }
+              >
+                Set to Processing ({selectedFilteredOnHoldOrderIds.length})
               </Button>
               <Button
                 size="sm"
                 disabled={
-                  isProcessing ||
-                  filteredOrders.filter(o => selectedFiltered.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "processing").length === 0
+                  isProcessing || selectedFilteredProcessingOrders.length === 0
                 }
-                onClick={() =>
-                  processOrders(
-                    filteredOrders.filter((o) =>
-                      selectedFiltered.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "processing"
-                    ),
-                  )
-                }
+                onClick={() => processOrders(selectedFilteredProcessingOrders)}
               >
-                Send Selected ({filteredOrders.filter(o => selectedFiltered.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "processing").length})
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowFiltered(false)}
-                className="cursor-pointer h-7"
-              >
-                <X className="h-3.5 w-3.5" />
+                Send Selected ({selectedFilteredProcessingOrders.length})
               </Button>
             </div>
           </div>
@@ -1188,29 +1380,17 @@ export function OrderTable({ orders }: { orders: Order[] }) {
           <Button
             variant="outline"
             size="sm"
-            disabled={
-              isProcessing ||
-              sortedOrders.filter(o => selectedMain.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "sent-to-koombiyo").length === 0
-            }
-            onClick={() => generateBulkWaybillPdfs(
-              sortedOrders.filter(o => selectedMain.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "sent-to-koombiyo").map(o => getOrderId(o))
-            )}
+            disabled={isProcessing || selectedMainSentOrderIds.length === 0}
+            onClick={() => generateBulkWaybillPdfs(selectedMainSentOrderIds)}
           >
-            PDF Selected ({sortedOrders.filter(o => selectedMain.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "sent-to-koombiyo").length})
+            PDF Selected ({selectedMainSentOrderIds.length})
           </Button>
           <Button
             size="sm"
-            disabled={
-              isProcessing ||
-              sortedOrders.filter(o => selectedMain.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "processing").length === 0
-            }
-            onClick={() =>
-              processOrders(
-                sortedOrders.filter((o) => selectedMain.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "processing"),
-              )
-            }
+            disabled={isProcessing || selectedMainProcessingOrders.length === 0}
+            onClick={() => processOrders(selectedMainProcessingOrders)}
           >
-            Send Selected ({sortedOrders.filter(o => selectedMain.has(getOrderId(o)) && getDisplayStatus(o).toLowerCase() === "processing").length})
+            Send Selected ({selectedMainProcessingOrders.length})
           </Button>
         </div>
 
@@ -1345,22 +1525,25 @@ export function OrderTable({ orders }: { orders: Order[] }) {
             {!detailsLoading && selectedOrderDetails && (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 align-middle">
-                  <Badge className="capitalize" variant="outline">
+                  <Badge
+                    className={`capitalize ${getStatusBadgeClass(
+                      selectedOrderDetails.status,
+                    )}`}
+                    variant="outline"
+                  >
                     Status: {selectedOrderDetails.status || "Pending"}
                   </Badge>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {!isLockedStatus(selectedOrderDetails.status) && (
+                    {normalizeStatus(selectedOrderDetails.status) ===
+                      "processing" && (
                       <Button
                         size="sm"
                         variant="secondary"
                         disabled={isProcessing || detailsSaving}
                         onClick={() => {
-                          const current = tableOrders.find(
-                            (order) => getOrderId(order) === selectedOrderId,
-                          );
-                          if (current) {
-                            processOrders([current]);
+                          if (selectedOrder) {
+                            processOrders([selectedOrder]);
                           }
                         }}
                       >
@@ -1371,7 +1554,12 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={isProcessing || detailsSaving || selectedOrderDetails.status.toLowerCase() !== "sent-to-koombiyo"}
+                      disabled={
+                        isProcessing ||
+                        detailsSaving ||
+                        selectedOrderDetails.status.toLowerCase() !==
+                          "sent-to-koombiyo"
+                      }
                       onClick={() => generateSingleWaybillPdf(selectedOrderId)}
                     >
                       PDF Waybill
@@ -1380,32 +1568,46 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                     {selectedOrderDetails.status.toLowerCase() !==
                       "sent-to-koombiyo" &&
                       selectedOrderDetails.status.toLowerCase() !==
-                      "rejected" && (
+                        "rejected" && (
                         <Button
                           size="sm"
                           variant="destructive"
                           disabled={isProcessing || detailsSaving}
-                          onClick={() =>
-                            updateOrderStatus(selectedOrderId, "rejected")
-                          }
+                          onClick={() => confirmAndRejectOrder(selectedOrderId)}
                         >
                           Reject this order
                         </Button>
                       )}
 
+                    {selectedDetailsNormalizedStatus === "on-hold" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isProcessing || detailsSaving}
+                        onClick={() =>
+                          updateOrderStatus(selectedOrderId, "processing")
+                        }
+                      >
+                        Mark as Processing
+                      </Button>
+                    )}
+
                     {selectedOrderDetails.status.toLowerCase() ===
                       "rejected" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isProcessing || detailsSaving}
-                          onClick={() =>
-                            updateOrderStatus(selectedOrderId, "on-hold")
-                          }
-                        >
-                          Reaccept this order
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isProcessing || detailsSaving}
+                        onClick={() =>
+                          updateOrderStatus(
+                            selectedOrderId,
+                            getReacceptStatusForOrder(selectedOrder),
+                          )
+                        }
+                      >
+                        Reaccept this order
+                      </Button>
+                    )}
 
                     <div className="flex justify-end gap-2 px-5">
                       {isEditMode ? (
@@ -1433,10 +1635,7 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                           </Button>
                         </>
                       ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => setIsEditMode(true)}
-                        >
+                        <Button size="sm" onClick={() => setIsEditMode(true)}>
                           Edit this Order
                         </Button>
                       )}
@@ -1475,9 +1674,14 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                               }
                               className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                             >
-                              <option value="" disabled>Select District</option>
+                              <option value="" disabled>
+                                Select District
+                              </option>
                               {districts.map((d) => (
-                                <option key={d.district_id} value={d.district_name}>
+                                <option
+                                  key={d.district_id}
+                                  value={d.district_name}
+                                >
                                   {d.district_name}
                                 </option>
                               ))}
@@ -1495,11 +1699,16 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                               className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full disabled:opacity-50"
                             >
                               <option value="" disabled>
-                                {loadingCities ? "Loading cities..." : "Select City"}
+                                {loadingCities
+                                  ? "Loading cities..."
+                                  : "Select City"}
                               </option>
                               {cities.map((c) => (
-                                <option key={c.city_id} value={c.name || (c as any).city_name}>
-                                  {c.name || (c as any).city_name}
+                                <option
+                                  key={c.city_id}
+                                  value={c.name || c.city_name || ""}
+                                >
+                                  {c.name || c.city_name || ""}
                                 </option>
                               ))}
                             </select>
@@ -1527,7 +1736,9 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                             />
                           )
                         ) : (
-                          <div className={`rounded-md border px-3 py-2 text-sm whitespace-pre-wrap break-words ${isEditMode ? "bg-muted/50 text-muted-foreground opacity-60 cursor-not-allowed" : "bg-muted/20"}`}>
+                          <div
+                            className={`rounded-md border px-3 py-2 text-sm whitespace-pre-wrap break-words ${isEditMode ? "bg-muted/50 text-muted-foreground opacity-60 cursor-not-allowed" : "bg-muted/20"}`}
+                          >
                             {field.value || "-"}
                           </div>
                         )}
@@ -1553,7 +1764,8 @@ export function OrderTable({ orders }: { orders: Order[] }) {
           <DialogHeader>
             <DialogTitle>Generating POD PDFs</DialogTitle>
             <DialogDescription>
-              Please wait while we process the selected orders and generate the PDF documents.
+              Please wait while we process the selected orders and generate the
+              PDF documents.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col space-y-4 py-4">

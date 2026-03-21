@@ -28,9 +28,22 @@ function isLockedStatus(status?: string) {
   return s === "sent-to-koombiyo" || s === "rejected";
 }
 
+function isProcessingStatus(status?: string) {
+  return (status ?? "").toLowerCase().trim() === "processing";
+}
+
 function parseCod(total: string | number | undefined) {
   const n = Number(String(total ?? "0").replace(/[^\d.]/g, ""));
   return Number.isFinite(n) ? n : 0;
+}
+
+function isCashOnDelivery(paymentMethod?: string) {
+  const normalized = String(paymentMethod ?? "").trim().toLowerCase();
+  return (
+    normalized === "cash on delivery" ||
+    normalized === "cod" ||
+    normalized.includes("cash on delivery")
+  );
 }
 
 export async function POST(req: Request) {
@@ -60,6 +73,12 @@ export async function POST(req: Request) {
 
       if (isLockedStatus(o.status)) {
         logs.push(`⏭️ #${orderId}: Skipped (${o.status}).`);
+        skippedOrderIds.push(orderId);
+        continue;
+      }
+
+      if (!isProcessingStatus(o.status)) {
+        logs.push(`⏭️ #${orderId}: Skipped (${o.status || "unknown"}). Status must be processing before sending.`);
         skippedOrderIds.push(orderId);
         continue;
       }
@@ -102,7 +121,7 @@ export async function POST(req: Request) {
         if (!receiverStreet) throw new Error("Missing receiver street/address.");
         if (!receiverPhone) throw new Error("Missing receiver phone.");
 
-        const isCOD = String(o.paymentMethod ?? "").trim().toLowerCase() === "cash on delivery";
+        const isCOD = isCashOnDelivery(o.paymentMethod);
 
         await addOrder({
           orderWaybillid: waybill,

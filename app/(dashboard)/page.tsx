@@ -13,6 +13,8 @@ import { Separator } from "@/components/ui/separator";
 
 import { checkWaybillsQuantity } from "@/lib/check-waybills";
 
+import spytXvincent from "@/public/spytXvincent.png";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -22,11 +24,12 @@ export default async function Home() {
 
   return (
     <div className="flex flex-col h-full min-h-screen bg-muted/20">
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4 shadow-sm sticky top-0 z-10 w-full transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+      <header className="flex h-18 shrink-0 items-center gap-2 border-b bg-background px-4 shadow-sm sticky top-0 z-10 w-full transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
         <div className="flex items-center gap-2 px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
+          <img src={spytXvincent.src} alt="Spyt x Vincent" className="h-15 w-auto" />
+          {/* <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
                 <BreadcrumbLink href="#">Dashboard</BreadcrumbLink>
@@ -36,7 +39,7 @@ export default async function Home() {
                 <BreadcrumbPage>Orders</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
-          </Breadcrumb>
+          </Breadcrumb> */}
         </div>
       </header>
 

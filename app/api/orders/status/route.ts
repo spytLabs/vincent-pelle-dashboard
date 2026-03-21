@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { updateOrderStatusByIdInSheet } from "@/lib/orders-sheet";
 
-type AllowedStatus = "rejected" | "on-hold";
+type AllowedStatus = "rejected" | "on-hold" | "processing";
 
 function isAllowedStatus(value: string): value is AllowedStatus {
-  return value === "rejected" || value === "on-hold";
+  return value === "rejected" || value === "on-hold" || value === "processing";
 }
 
 export async function PATCH(req: Request) {
@@ -19,7 +19,7 @@ export async function PATCH(req: Request) {
 
     if (!isAllowedStatus(status)) {
       return NextResponse.json(
-        { error: "status must be either rejected or on-hold." },
+        { error: "status must be one of rejected, on-hold, or processing." },
         { status: 400 }
       );
     }

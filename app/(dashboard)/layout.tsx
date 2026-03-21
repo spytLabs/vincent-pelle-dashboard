@@ -11,7 +11,7 @@ export default function DashboardLayout({
 }) {
   return (
     <TooltipProvider>
-      <SidebarProvider>
+      <SidebarProvider defaultOpen={false}>
         <AuthCheck />
         <AppSidebar />
         <SidebarInset>
