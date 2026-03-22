@@ -35,6 +35,9 @@ async function addOrder(input: AddOrderInput) {
         getCod: String(input.getCod),
     }).toString();
 
+    console.log('Add Order URL:', url);
+    console.log('Add Order Body:', body);
+
     const response = await fetch(url, {
         method: 'POST',
         headers: {
