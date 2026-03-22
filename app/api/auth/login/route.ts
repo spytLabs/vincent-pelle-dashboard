@@ -19,10 +19,13 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "accept": "*/*",
+        "accept-language": "en-US,en;q=0.9,si;q=0.8",
         "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
         "x-requested-with": "XMLHttpRequest",
         "user-agent": userAgent,
         "x-forwarded-for": clientIp,
+        "origin": "https://koombiyodelivery.lk",
+        "referer": "https://koombiyodelivery.lk/",
       },
       body: `logUsername=${encodeURIComponent(username)}&logPass=${encodeURIComponent(password)}`,
       redirect: "manual",
