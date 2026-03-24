@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -27,6 +27,7 @@ import {
   ArrowUpDown,
   Filter,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { Checkbox } from "radix-ui";
 import {
@@ -37,6 +38,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { isTauri } from "@tauri-apps/api/core";
+import { writeFile } from "@tauri-apps/plugin-fs";
+import { save } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-shell";
+import { useRouter } from "next/navigation";
 
 type SortKey = "id" | "dateCreated" | "status" | "district";
 type SortDirection = "asc" | "desc";
@@ -155,6 +161,9 @@ function getStatusBadgeClass(status?: string) {
 }
 
 export function OrderTable({ orders }: { orders: Order[] }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
   const [tableOrders, setTableOrders] = useState<Order[]>(orders);
   useEffect(() => {
     setTableOrders(orders);
@@ -464,9 +473,44 @@ export function OrderTable({ orders }: { orders: Order[] }) {
     return "";
   }, []);
 
-  const openWaybillPdf = useCallback((waybill: string) => {
+  const openWaybillPdf = useCallback(async (waybill: string) => {
     const url = `/api/pod?waybillid=${encodeURIComponent(waybill)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    try {
+      showToast(`DEBUG: openWaybillPdf executing... waybill=${waybill}`, "info");
+      const inTauri = isTauri() || (typeof window !== "undefined" && window.hasOwnProperty("__TAURI_INTERNALS__"));
+      showToast(`DEBUG: inTauri evaluates to ${inTauri}`, "info");
+
+      if (inTauri) {
+        showToast("DEBUG: Fetching PDF...", "info");
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Failed to fetch PDF: ${res.statusText}`);
+        const arrayBuffer = await res.arrayBuffer();
+
+        showToast("DEBUG: Calling save dialog...", "info");
+        const filePath = await save({
+          title: "Save Waybill PDF",
+          filters: [{ name: "PDF", extensions: ["pdf"] }],
+          defaultPath: `pod_${waybill}.pdf`,
+        });
+
+        showToast(`DEBUG: save resolved with: ${filePath}`, "info");
+
+        if (filePath) {
+          showToast(`DEBUG: writing file...`, "info");
+          await writeFile(filePath, new Uint8Array(arrayBuffer));
+          showToast(`DEBUG: opening file...`, "info");
+          await open(filePath);
+          return true; // downloaded and opened
+        }
+        return false; // dialog cancelled
+      } else {
+        throw new Error("Tauri environment not detected (isTauri is false).");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("Tauri download failed:", e);
+      throw new Error(`Tauri download failed: ${msg}`);
+    }
   }, []);
 
   const ensureWaybillForOrder = useCallback(
@@ -493,8 +537,10 @@ export function OrderTable({ orders }: { orders: Order[] }) {
     async (orderId: string) => {
       try {
         const waybill = await ensureWaybillForOrder(orderId);
-        openWaybillPdf(waybill);
-        showToast(`Opened waybill PDF for order #${orderId}.`, "success");
+        const success = await openWaybillPdf(waybill);
+        if (success) {
+          showToast(`Opened waybill PDF for order #${orderId}.`, "success");
+        }
       } catch (e) {
         showToast(
           e instanceof Error ? e.message : "Failed to generate waybill PDF.",
@@ -561,20 +607,30 @@ export function OrderTable({ orders }: { orders: Order[] }) {
             const data = await res.json().catch(() => ({}));
             throw new Error(data?.error || "Failed to generate bulk PDF.");
           }
-
           setPdfStatusText("Downloading...");
           setPdfProgress(95);
 
           const blob = await res.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.style.display = "none";
-          a.href = url;
-          a.download = `bulk_pods_${new Date().getTime()}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
+
+          const inTauri = isTauri() || (typeof window !== "undefined" && window.hasOwnProperty("__TAURI_INTERNALS__"));
+          if (inTauri) {
+            const arrayBuffer = await blob.arrayBuffer();
+            const filePath = await save({
+              title: "Save Bulk Waybills PDF",
+              filters: [{ name: "PDF", extensions: ["pdf"] }],
+              defaultPath: `bulk_pods_${new Date().getTime()}.pdf`,
+            });
+
+            if (filePath) {
+              await writeFile(filePath, new Uint8Array(arrayBuffer));
+              await open(filePath);
+            } else {
+              setPdfStatusText("Download cancelled.");
+              return;
+            }
+          } else {
+            throw new Error("Tauri environment not detected (isTauri is false).");
+          }
 
           setPdfStatusText("Download complete!");
           setPdfProgress(100);
@@ -627,9 +683,9 @@ export function OrderTable({ orders }: { orders: Order[] }) {
       prev.map((order) =>
         getOrderId(order) === orderId
           ? {
-              ...order,
-              status,
-            }
+            ...order,
+            status,
+          }
           : order,
       ),
     );
@@ -903,9 +959,9 @@ export function OrderTable({ orders }: { orders: Order[] }) {
           prev.map((order) =>
             data.updatedOrderIds.includes(getOrderId(order))
               ? {
-                  ...order,
-                  status: "sent-to-koombiyo",
-                }
+                ...order,
+                status: "sent-to-koombiyo",
+              }
               : order,
           ),
         );
@@ -924,8 +980,7 @@ export function OrderTable({ orders }: { orders: Order[] }) {
 
         if (data.updatedOrderIds.length > 0) {
           showToast(
-            `Sent ${data.updatedOrderIds.length} order${
-              data.updatedOrderIds.length > 1 ? "s" : ""
+            `Sent ${data.updatedOrderIds.length} order${data.updatedOrderIds.length > 1 ? "s" : ""
             } to Koombiyo.`,
             "success",
           );
@@ -1179,13 +1234,12 @@ export function OrderTable({ orders }: { orders: Order[] }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`rounded-md border px-3 py-2 text-sm shadow-lg ${
-              toast.variant === "success"
-                ? "border-emerald-600/30 bg-emerald-50 text-emerald-900"
-                : toast.variant === "error"
-                  ? "border-destructive/40 bg-destructive/10 text-destructive"
-                  : "border-sky-600/30 bg-sky-50 text-sky-900"
-            }`}
+            className={`rounded-md border px-3 py-2 text-sm shadow-lg ${toast.variant === "success"
+              ? "border-emerald-600/30 bg-emerald-50 text-emerald-900"
+              : toast.variant === "error"
+                ? "border-destructive/40 bg-destructive/10 text-destructive"
+                : "border-sky-600/30 bg-sky-50 text-sky-900"
+              }`}
           >
             {toast.message}
           </div>
@@ -1236,6 +1290,19 @@ export function OrderTable({ orders }: { orders: Order[] }) {
             <X className="h-3.5 w-3.5 mr-1" /> Clear
           </Button>
         )}
+
+        <div className="ml-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={() => startTransition(() => router.refresh())}
+            className="cursor-pointer"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isPending ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Filtered Results Temp Table */}
@@ -1537,19 +1604,19 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                   <div className="flex flex-wrap items-center gap-2">
                     {normalizeStatus(selectedOrderDetails.status) ===
                       "processing" && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={isProcessing || detailsSaving}
-                        onClick={() => {
-                          if (selectedOrder) {
-                            processOrders([selectedOrder]);
-                          }
-                        }}
-                      >
-                        Send to Koombiyo
-                      </Button>
-                    )}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={isProcessing || detailsSaving}
+                          onClick={() => {
+                            if (selectedOrder) {
+                              processOrders([selectedOrder]);
+                            }
+                          }}
+                        >
+                          Send to Koombiyo
+                        </Button>
+                      )}
 
                     <Button
                       size="sm"
@@ -1558,7 +1625,7 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                         isProcessing ||
                         detailsSaving ||
                         selectedOrderDetails.status.toLowerCase() !==
-                          "sent-to-koombiyo"
+                        "sent-to-koombiyo"
                       }
                       onClick={() => generateSingleWaybillPdf(selectedOrderId)}
                     >
@@ -1568,7 +1635,7 @@ export function OrderTable({ orders }: { orders: Order[] }) {
                     {selectedOrderDetails.status.toLowerCase() !==
                       "sent-to-koombiyo" &&
                       selectedOrderDetails.status.toLowerCase() !==
-                        "rejected" && (
+                      "rejected" && (
                         <Button
                           size="sm"
                           variant="destructive"
@@ -1594,20 +1661,20 @@ export function OrderTable({ orders }: { orders: Order[] }) {
 
                     {selectedOrderDetails.status.toLowerCase() ===
                       "rejected" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={isProcessing || detailsSaving}
-                        onClick={() =>
-                          updateOrderStatus(
-                            selectedOrderId,
-                            getReacceptStatusForOrder(selectedOrder),
-                          )
-                        }
-                      >
-                        Reaccept this order
-                      </Button>
-                    )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isProcessing || detailsSaving}
+                          onClick={() =>
+                            updateOrderStatus(
+                              selectedOrderId,
+                              getReacceptStatusForOrder(selectedOrder),
+                            )
+                          }
+                        >
+                          Reaccept this order
+                        </Button>
+                      )}
 
                     <div className="flex justify-end gap-2 px-5">
                       {isEditMode ? (
