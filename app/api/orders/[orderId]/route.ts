@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getOrderDetailsById, updateOrderDetailsById } from "@/lib/orders-sheet";
+import { syncOrderToWooCommerce } from "@/lib/woocommerce";
 
 type Params = {
   params: Promise<{
@@ -42,20 +43,8 @@ export async function PATCH(req: Request, { params }: Params) {
     }
 
     const ALLOWED_EDITABLE_FIELDS = [
-      "Customer Name",
-      "Email",
-      "Phone",
-      "WhatsApp",
-      "Address Line 1",
-      "Address Line 2",
       "City",
-      "State",
-      "Postcode",
-      "District",
-      "Items Summary",
-      "Shipping",
-      "Total",
-      "Customer Note"
+      "District"
     ];
 
     const allowedSet = new Set(ALLOWED_EDITABLE_FIELDS.map(f => f.toLowerCase()));
@@ -74,6 +63,13 @@ export async function PATCH(req: Request, { params }: Params) {
     }
 
     const order = await updateOrderDetailsById(orderId, updates as Record<string, string>);
+
+    try {
+      await syncOrderToWooCommerce(orderId, updates as Record<string, string>);
+    } catch (syncErr) {
+      console.error("Failed to sync with WooCommerce:", syncErr);
+    }
+
     return NextResponse.json({ success: true, order });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown server error";

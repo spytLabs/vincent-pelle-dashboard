@@ -44,7 +44,7 @@ function getStatusValueByHeaderMap(
 
 function getEditableByHeader(header: string): boolean {
   const h = normalizeHeader(header);
-  return h !== "status" && h !== "order id" && h !== "id";
+  return h === "city" || h === "district";
 }
 
 async function getSheetsClient() {
@@ -152,7 +152,7 @@ export async function updateOrderDetailsById(
   const updates = Object.entries(fieldUpdates)
     .filter(([header]) => {
       const normalized = normalizeHeader(header);
-      return normalized !== "status" && normalized !== "order id" && normalized !== "id";
+      return normalized === "city" || normalized === "district";
     })
     .map(([header, value]) => {
       const headerIndex = data.headers.findIndex((h) => h === header);

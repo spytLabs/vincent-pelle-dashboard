@@ -40,8 +40,14 @@ export async function getOrders(): Promise<Order[]> {
         // Fetch all rows
         const rows = await sheet.getRows();
 
+        // Filter out rows that are not "processing"
+        const filteredRows = rows.filter((row) => {
+            const status = row.get('Status');
+            return status && status.toString().trim().toLowerCase() === 'processing';
+        });
+
         // Map rows to Order interface based on the requested columns
-        return rows.map((row) => ({
+        return filteredRows.map((row) => ({
             id: row.get('Order ID') || '',
             orderNumber: row.get('Order Number') || '',
             status: row.get('Status') || '',
